@@ -57,33 +57,32 @@ an `.RData` object for easier use in subsequent scripts. Additionally, some
 quality checks and comparisons (between `next_day` and `same_day` sample 
 processing) are performed.
 
-input:
-- meta_samples.tsv
-- copies_16S.tsv
-- sequencing_stats.tsv
-- motus_all.tsv
-- metaphlan_all.tsv
-- meta_participants.tsv
+	input:
+	- meta_samples.tsv
+	- copies_16S.tsv
+	- sequencing_stats.tsv
+	- motus_all.tsv
+	- metaphlan_all.tsv
+	- meta_participants.tsv
 
-output:
-- figures/sample_type/*
-- figures/general/*
-- all_data.RData
-   - feat.motus     # motus table
-   - feat.metaphlan # metaphlan table
-   - df.meta.clean  # cleaned metadata table for each sample
-   - df.response    # cleaned metadata table for each participant
+	output:
+	- figures/sample_type/*
+	- figures/general/*
+	- all_data.RData
+   		- feat.motus     # motus table
+   		- feat.metaphlan # metaphlan table
+   		- df.meta.clean  # cleaned metadata table for each sample
+   		- df.response    # cleaned metadata table for each participant
 
 3. `diversity`  
 This script explores the trajectory of microbial alpha diversity and absolute
 abundance over time in both treatment arms.
 
-input:
-- all_data.RData
+	input:
+	- all_data.RData
 
-output:
-- figures/alpha/*
-
+	output:
+	- figures/alpha/*
 
 4. `abx_analyses`  
 This script  
