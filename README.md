@@ -40,16 +40,16 @@ for more detail. A second batch of samples were measured by ddPCR, as we had
 selected a subset of samples with relatively high concentration in the 
 first batch.
 
-input:
-- meta_samples.tsv
-- sequencing_stats.tsv
-- ddPCR_results_*
-- ddPCR_layout_*
-- metaphlan_all.tsv
+	input:
+	- meta_samples.tsv
+	- sequencing_stats.tsv
+	- ddPCR_results_*
+	- ddPCR_layout_*
+	- metaphlan_all.tsv
 
-output:
-- copies_16S.tsv
-- figures/ddPCR/*
+	output:
+	- copies_16S.tsv
+	- figures/ddPCR/*
 
 2. `clean_tables`  
 This script collates all data and metadata and saves the resulting tables in
