@@ -85,7 +85,20 @@ abundance over time in both treatment arms.
 	- figures/alpha/*
 
 4. `abx_analyses`  
-This script  
+This script investigates the influence of different antibiotics on the absolute
+microbial load. Treatment arms are compared by their exposure to antibiotics
+and each sample is classified as being exposed to antibiotics or not. Additionally,
+the influence of prophylactic vs non-prophylactic antibiotics is explored, 
+showing that the difference between GVHD prophylaxis arms in absolute microbial
+abundance is not due to differences in antibiotics exposure.
+
+	input:
+	- all_data.Rdata
+	- antibiotics_data.tsv
+
+	output:
+	- figures/abx/*
+	
 
 5. `domination`  
 This script 
