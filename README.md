@@ -23,7 +23,7 @@ be provided with other data on Zenodo.
 
 The raw sequencing data for all metagenomic stool samples in the project
 have been uploaded to ENA and are available under the identifier
-(PRJEB97686)[https://www.ebi.ac.uk/ena/browser/view/PRJEB97686]. 
+[PRJEB97686](https://www.ebi.ac.uk/ena/browser/view/PRJEB97686). 
 The derived data tables (sequencing statistics, motus and metaphlan
 profiles) are available on Zenodo as well.
 
