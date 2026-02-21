@@ -131,7 +131,18 @@ abundance testing.
 	- files/enrichment_results.tsv
 	
 7. `humann`  
-This script 
+This script explores the functional microbiome profiles generated with the
+Humann package, mapped to metacyc pathways. Overall differences between 
+treatment arms are explored and, similar to compositional differences,
+additional analyses zoom in on bile acid modification pathways as the top hit
+in the differential abundance analysis.
+
+	input:
+	- all_data.Rdata
+	- data/humann.tsv
+
+	output:
+	- figures/humann/*
 
 #### Primary and secondary clinical trial endpoints
 
