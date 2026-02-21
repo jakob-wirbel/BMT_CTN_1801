@@ -101,7 +101,19 @@ abundance is not due to differences in antibiotics exposure.
 	
 
 5. `domination`  
-This script 
+This script deals with domination events, when a single microbial species is
+present at more than 30% relative abundance in a sample. Differences between 
+study arms are explored and what type of species lead to domination.
+Interestingly, not all commonly dominating species are pathogens, but also 
+species with comparably high relative abundance in not-dominated samples, 
+arguing for a nuanced view on microbial domination. Associations with outcome
+are also explored.
+
+	input:
+	- all_data.Rdata
+
+	output:
+	- figures/domination/*
 
 6. `composition`  
 This script investigates differences in microbiome composition between treatment
