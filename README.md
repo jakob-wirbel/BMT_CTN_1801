@@ -25,7 +25,7 @@ The raw sequencing data for all metagenomic stool samples in the project
 have been uploaded to ENA and are available under the identifier
 [PRJEB97686](https://www.ebi.ac.uk/ena/browser/view/PRJEB97686). 
 The derived data tables (sequencing statistics, motus and metaphlan
-profiles) are available on Zenodo as well.
+profiles) are available on Zenodo.
 
 ### Scripts
 
@@ -103,9 +103,21 @@ abundance is not due to differences in antibiotics exposure.
 5. `domination`  
 This script 
 
-6. `associations`  
-This script 
+6. `composition`  
+This script investigates differences in microbiome composition between treatment
+arms. Overall relative abundance differences are computed and additional 
+analyses zoom in on _Clostridium scindes_ as top hit in the differential 
+abundance testing.
 
+	input:
+	- all_data.Rdata
+	- files/abx_exposure.RData
+	- files/mOTUs_3.0.0_GTDB_tax.tsv
+
+	output:
+	- figures/composition/*
+	- files/enrichment_results.tsv
+	
 7. `humann`  
 This script 
 
