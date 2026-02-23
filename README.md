@@ -3,7 +3,7 @@
 Analysis code for the BMT CTN 1801 microbiome project.
 
 Please refer to our publication for more information:
-> [Authors. Title. bioRxiv (2025)](https://www.biorxiv.org/)
+> [Wirbel, Saber, Martens et al. Differential effects of two common GVHD prophylaxis regimens on the gut microbiome: Results from the BMT CTN 1801 study. bioRxiv (2026)](https://www.biorxiv.org/content/10.64898/2026.02.19.706769v1)
 
 ## Repository organization
 
