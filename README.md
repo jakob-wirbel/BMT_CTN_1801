@@ -144,7 +144,7 @@ in the differential abundance analysis.
 	output:
 	- figures/humann/*
 
-#### Primary and secondary clinical trial endpoints
+## Primary and secondary clinical trial endpoints
 
 The primary and secondary clinical trial analyses were performed by Michael J.
 Martens at the Division of Biostatistics, Medical College of Wisconsin, WI, USA,
