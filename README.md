@@ -156,4 +156,4 @@ link above).
 
 If you have any questions/issues, please feel free to open an 
 issue in this repo or reach out to
-_wirbel[at]stanford.edu_.
+_jakob.wirbel[at]helmholtz-hzi.de.
