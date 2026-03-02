@@ -149,8 +149,8 @@ in the differential abundance analysis.
 The primary and secondary clinical trial analyses were performed by Michael J.
 Martens at the Division of Biostatistics, Medical College of Wisconsin, WI, USA,
 based on the pre-specified statistical plan. The official BMT CTN 1801 analysis
-report is confidential/available upon request (? actually, not sure...
-will have to ask Mike ?).
+results are included as Supplementary Information in the manuscript (see
+link above).
 
 ## Contact
 
