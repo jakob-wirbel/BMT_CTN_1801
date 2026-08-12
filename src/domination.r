@@ -68,6 +68,11 @@ g <- df.meta.clean %>%
 ggsave(g, filename=here('figures/domination/percentage_of_samples.pdf'),
        width = 10, height = 4, useDingbats=FALSE)
 
+# export source data
+g$data %>% 
+  select(Timepoint, Treatment_group, n, n.all, freq) %>% 
+  write_tsv('./figures/source_data/Fig3a.tsv')
+
 # test group influence
 df.meta.clean %>% 
   mutate(dominated=Sample_ID %in% df.domination$name) %>% 
@@ -204,6 +209,11 @@ g <- named.species %>%
 ggsave(g, filename=here('figures/domination/dominating_species_filled.pdf'),
        width = 8, height = 4, useDingbats=FALSE)
 
+# export source data
+g$data %>% 
+  select(species, species_nice, Treatment_group, n, n.all) %>% 
+  write_tsv('./figures/source_data/Fig3b.tsv')
+
 pdf(here('figures/domination/single_species.pdf'),
     width = 8, height = 4, useDingbats = FALSE)
 df.rates <- list()
@@ -298,6 +308,25 @@ g <- as_tibble(t(feat.rel[unique(named.species$species),]),
 ggsave(g, filename=here('figures/domination/abundance_distribution.pdf'),
        width = 5, height = 4, useDingbats=FALSE)
 
+# export source data
+# this is a bit annoying, since we need to access the underlying ggplot2 stuff
+
+data <- g@data %>% 
+  select(species_nice, value) %>% 
+  mutate(weight=1, value=log10(value+1e-05))
+range <- c(-4.4, 0)
+map(unique(data$species_nice), .f = function(x){
+  tmp <- data %>% 
+    filter(species_nice==x)
+  density <- ggplot2:::compute_density(tmp$value, tmp$weight, from = range[1], 
+                                       to = range[2], bw = 'nrd0', adjust = 1, 
+                                       kernel = "gaussian", 
+                                       n = 100, bounds = c(-Inf, Inf))
+  tibble(value=density$x, density=density$density, species=x)
+}) %>% bind_rows() %>% write_tsv('./figures/source_data/Fig3c.tsv')
+
+
+
 as_tibble(t(feat.rel[unique(named.species$species),]), 
           rownames='Sample_ID') %>% 
   pivot_longer(-Sample_ID, names_to = 'species') %>% 
@@ -329,6 +358,11 @@ g <- as_tibble(t(feat.rel[unique(named.species$species),]),
     scale_alpha_manual(values=c(0.4, 1))
 ggsave(g, filename=here('figures/domination/rel_ab_vs_copies.pdf'),
        width = 7, height = 7, useDingbats=FALSE)
+
+# export source data
+g@data %>% 
+  select(Sample_ID, species_nice, value, copies_16S, dom) %>% 
+  write_tsv('./figures/source_data/EDFig6a.tsv')
 
 # this tells me that domination does not mean domination: some species have low
 # absolute abundance, when dominating, others have high abundance even when
@@ -426,6 +460,16 @@ g <- tmp %>%
 ggsave(g, filename=here('./figures/domination/copies_16S.pdf'),
        width = 8, height = 5, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  select(Sample_ID, species, copies_16S) %>% 
+  write_tsv('./figures/source_data/Fig3d.tsv')
+
+# actual values
+tmp %>% 
+  group_by(species) %>% 
+  reframe(m_copies=median(copies_16S)) %>% 
+  arrange(desc(m_copies))
 
 # test difference to non-dominated samples
 pvals <- rep(NA, length.out=length(unique(named.species$species)))
@@ -504,6 +548,10 @@ g <- as_tibble(feat.rel[pathos,], rownames='species') %>%
 ggsave(g, filename=here('figures/domination/freq_domination_pathogens.pdf'),
        width = 7, height = 4, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  arrange(species, Timepoint) %>% 
+  write_tsv('./figures/source_data/EDFig6b.tsv')
 
 # association with outcome?
 source(here('src/utils.r'))
@@ -580,4 +628,8 @@ df.hr %>%
   mutate(qval=p.adjust(pval, method='BH')) %>% 
   arrange(pval)
 
-# this might be chance
+# this might be chance?
+
+# export source data
+df.hr %>% 
+  write_tsv('./figures/source_data/Fig3e.tsv')
