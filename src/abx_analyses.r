@@ -6,6 +6,7 @@
 
 library("tidyverse")
 library("here")
+library("vegan")
 library("survival")
 
 colours <- yaml::read_yaml('./files/colours.yml')
@@ -350,7 +351,7 @@ abx.select <- abx.condensed %>%
 
 #View(abx.select) 100 seems like a good cutoff, maybe?
 abx.select <- abx.select %>% 
-  filter(m > 100) %>% pull(Abx)
+  filter(m > 10) %>% pull(Abx)
 
 # exposure across arms for single abx
 n.all <- df.response %>% 
@@ -420,7 +421,7 @@ abx.data %>%
   }) %>% bind_rows() %>% 
   filter(!is.na(pval)) %>% 
   mutate(q.val=p.adjust(pval, method='BH')) %>% 
-  arrange(pval) %>% print(n=27)
+  arrange(pval)
 # # A tibble: 27 × 3
 # pval Abx                                             q.val
 # <dbl> <chr>                                           <dbl>
@@ -622,7 +623,7 @@ drugs <- df.res %>%
   filter(n_interest > 10) %>%
   pull(comb)
 # remove prophylaxis abx
-abx.pro <- c('Ciprofloxacin/Cipro-PO', 
+abx.pro <- c('Ciprofloxacin/Cipro-PO', 'PenicillinVK/Apo-pen-VK/Novo-pen-VK-PO',
              'Trimethoprim-Sulfamethoxazole/Bactrim/Septra-PO',
              'Levofloxacin/Levaquin-PO', 'Dapsone-PO', 'Cefdinir-PO')
 abx.treat <- setdiff(drugs, abx.pro)
@@ -644,16 +645,32 @@ tmp <- abx.data %>%
   mutate(comb=paste0(Abx, '-', Route)) %>% 
   filter(comb %in% abx.treat) %>% 
   select(Participant_ID, Start_rel, End_rel) %>% 
-  arrange(Participant_ID)
+  arrange(Participant_ID) 
 
-df.test <- tmp %>% 
+tmp2 <- tmp %>% 
   full_join(df.cor, by='Participant_ID', relationship = 'many-to-many') %>% 
+  mutate(period=Timepoint-7) %>% 
+  filter(!is.na(Start_rel))
+
+subject <- IRanges::IRanges(tmp2$Start_rel, tmp2$End_rel)
+query <- IRanges::IRanges(tmp2$period, tmp2$Timepoint)
+p <- IRanges::pintersect(subject, query, resolve.empty='max.start')
+
+df.test <- tmp2 %>% 
+  mutate(doses=p@width) %>% 
+  bind_rows(tmp %>% 
+              full_join(df.cor, by='Participant_ID', 
+                        relationship = 'many-to-many') %>% 
+              mutate(period=Timepoint-7) %>% 
+              filter(is.na(Start_rel)) %>% 
+              mutate(doses=0)) %>% 
   mutate(drug=case_when(
     ((Start_rel < (Timepoint-7)) & (End_rel > (Timepoint-7)))~'yes',
     ((Start_rel < (Timepoint)) & (End_rel > (Timepoint)))~'yes',
     TRUE~'no')) %>% 
-  group_by(Participant_ID, Timepoint, Treatment_group, copies_16S) %>% 
-  reframe(drug=any(drug=='yes'))
+  group_by(Participant_ID, Timepoint, Treatment_group, 
+           copies_16S, Sample_ID) %>% 
+  reframe(drug=any(drug=='yes'), doses=sum(doses))
 
 g <- df.test %>% 
   filter(Timepoint > 10, Timepoint < 30) %>% 
@@ -676,8 +693,6 @@ fisher.test(table(df.test %>%
                     pull(Treatment_group),
                   df.test %>% filter(Timepoint > 10, Timepoint < 30) %>% 
                     pull(drug)))
-
-# 
 # Fisher's Exact Test for Count Data
 # 
 # data:  table(df.test %>% filter(Timepoint > 10, Timepoint < 30) %>% pull(Treatment_group), df.test %>% filter(Timepoint > 10, Timepoint < 30) %>% pull(drug))
@@ -689,6 +704,86 @@ fisher.test(table(df.test %>%
 # odds ratio 
 #  0.6944621 
 
+# number of doses?
+
+g <- df.test %>% 
+  filter(Timepoint > 10, Timepoint < 30) %>% 
+  ggplot(aes(x=Treatment_group, y=doses)) + 
+    geom_boxplot(outlier.shape = NA) +
+    geom_jitter(width = 0.1) +
+    theme_bw() + 
+    xlab('') 
+ggsave(g, filename=here('figures/abx/doses_non_prophylaxis_14_28.pdf'),
+       width = 4, height = 4, useDingbats=FALSE)
+
+wilcox.test(doses~Treatment_group, 
+            data=df.test %>% filter(Timepoint > 10, Timepoint < 30))
+
+# data:  doses by Treatment_group
+# W = 52762, p-value = 0.008665
+# alternative hypothesis: true location shift is not equal to 0
+
+write_tsv(df.test, file='./files/abx_exposure.tsv')
+
+
+# ##############################################################################
+# Test everything, while taking the antibiotic exposure into account
+
+
+### alpha diversity
+feat.rar <- rrarefy(t(feat.motus), 3000)
+alpha <- enframe(diversity(feat.rar, index='shannon'), 
+                 value='shannon', name='Sample_ID') %>% 
+  full_join(enframe(diversity(feat.rar, index='invsimpson'), 
+                    value='invsimpson', name='Sample_ID'), by='Sample_ID') %>% 
+  full_join(enframe(diversity(feat.rar, index='simpson'), 
+                    value='simpson', name='Sample_ID'), by='Sample_ID')
+df.test <- df.test %>% 
+  full_join(alpha, by='Sample_ID')
+
+for (var in c('shannon', 'invsimpson', 'simpson', 'copies_16S')){
+  # with/without abx
+  fit.without <- lmerTest::lmer(
+    paste0(var, '~Treatment_group+(1|Participant_ID)'), 
+    data=df.test %>% 
+      filter(Timepoint> 10, Timepoint < 30))
+  fit.with <- lmerTest::lmer(
+    paste0(var, '~Treatment_group+drug+(1|Participant_ID)'), 
+    data=df.test %>% 
+      filter(Timepoint> 10, Timepoint < 30))
+  fit.with.c <- lmerTest::lmer(
+    paste0(var, '~Treatment_group+doses+(1|Participant_ID)'), 
+    data=df.test %>% 
+      filter(Timepoint> 10, Timepoint < 30))
+  p.wo <- coefficients(summary(fit.without))['Treatment_groupTac/MTX','Pr(>|t|)']
+  p.wi <- coefficients(summary(fit.with))['Treatment_groupTac/MTX','Pr(>|t|)']
+  p.wi.c <- coefficients(summary(fit.with.c))['Treatment_groupTac/MTX','Pr(>|t|)']
+  
+  message(var)
+  message("P-value without Abx: ", sprintf(fmt='%.5f',p.wo))
+  message("P-value with Abx: ", sprintf(fmt='%.5f',p.wi))
+  message("P-value with Abx (continuous): ", sprintf(fmt='%.5f',p.wi.c))
+}
+
+# shannon
+# P-value without Abx: 0.03793
+# P-value with Abx: 0.08043
+# P-value with Abx (continuous): 0.08736
+# invsimpson
+# P-value without Abx: 0.01095
+# P-value with Abx: 0.02372
+# P-value with Abx (continuous): 0.02318
+# simpson
+# P-value without Abx: 0.12696
+# P-value with Abx: 0.26405
+# P-value with Abx (continuous): 0.28978
+# copies_16S
+# P-value without Abx: 0.00003
+# P-value with Abx: 0.00007
+# P-value with Abx (continuous): 0.00007
+
+
+#### visualize the difference in microbial load
 
 df.m <- df.test %>% 
   filter(Timepoint > 10, Timepoint < 30) %>% 
@@ -714,25 +809,6 @@ g <- df.test %>%
 ggsave(g, filename=here('figures/abx/load_non_prophylaxis_14_28.pdf'),
        width = 5, height = 4, useDingbats=FALSE)
 
-fit <- lmerTest::lmer(copies_16S~Treatment_group+drug+(1|Participant_ID), 
-                      data=df.test %>% filter(Timepoint> 10, Timepoint < 30))
-coefficients(summary(fit))
-# Estimate Std. Error       df    t value      Pr(>|t|)
-# (Intercept)             8.7282552 0.06266124 329.6833 139.292736 5.126462e-295
-# Treatment_groupTac/MTX  0.3138135 0.07770614 265.3585   4.038464  7.047726e-05
-# drugTRUE               -0.3593372 0.06628659 579.7957  -5.420964  8.708413e-08
-
-fit <- lmerTest::lmer(copies_16S~Treatment_group+(1|Participant_ID), 
-                      data=df.test %>% filter(Timepoint> 10, Timepoint < 30))
-coefficients(summary(fit))
-# Estimate Std. Error       df    t value      Pr(>|t|)
-# (Intercept)            8.5551982 0.05601974 257.1058 152.717578 2.649049e-254
-# Treatment_groupTac/MTX 0.3414158 0.08035317 263.0165   4.248941  2.984152e-05
-
-# yes, that makes a lot of sense! these are the most common non-prophylaxis
-# and strongest effect drugs and they do not explain the lower load for
-# the PTCy group!!!
-
 
 # ##############################################################################
 #' Let's try this differently
@@ -746,24 +822,40 @@ coefficients(summary(fit))
 #' If both approaches end up showing a similar pictures, that would be 
 #' pretty strong and then it would convince myself as well
 
-# all the IV abx are considered to be treatment!
-# the rest of the code is the same as before
+#' all the IV abx are considered to be treatment!
+#' the rest of the code is the same as before
 tmp <- abx.data %>% 
   filter(!Class%in%c('antiviral', 'antifungal')) %>%
   filter(Route=='IV') %>% 
   select(Participant_ID, Start_rel, End_rel) %>% 
   arrange(Participant_ID)
 
-df.test <- tmp %>% 
+tmp2 <- tmp %>% 
   full_join(df.cor, by='Participant_ID', relationship = 'many-to-many') %>% 
+  mutate(period=Timepoint-7) %>% 
+  filter(!is.na(Start_rel))
+
+subject <- IRanges::IRanges(tmp2$Start_rel, tmp2$End_rel)
+query <- IRanges::IRanges(tmp2$period, tmp2$Timepoint)
+p <- IRanges::pintersect(subject, query, resolve.empty='max.start')
+
+df.test.iv <- tmp2 %>% 
+  mutate(doses=p@width) %>% 
+  bind_rows(tmp %>% 
+              full_join(df.cor, by='Participant_ID', 
+                        relationship = 'many-to-many') %>% 
+              mutate(period=Timepoint-7) %>% 
+              filter(is.na(Start_rel)) %>% 
+              mutate(doses=0)) %>% 
   mutate(drug=case_when(
     ((Start_rel < (Timepoint-7)) & (End_rel > (Timepoint-7)))~'yes',
     ((Start_rel < (Timepoint)) & (End_rel > (Timepoint)))~'yes',
     TRUE~'no')) %>% 
-  group_by(Participant_ID, Timepoint, Treatment_group, copies_16S) %>% 
-  reframe(drug=any(drug=='yes'))
+  group_by(Participant_ID, Timepoint, Treatment_group, 
+           copies_16S, Sample_ID) %>% 
+  reframe(drug=any(drug=='yes'), doses=sum(doses))
 
-g <- df.test %>% 
+g <- df.test.iv %>% 
   filter(Timepoint > 10, Timepoint < 30) %>% 
   group_by(Treatment_group, drug) %>% 
   tally() %>% 
@@ -779,10 +871,10 @@ ggsave(g, filename=here('figures/abx/proportion_non_prophylaxis_14_28_IV.pdf'),
        width = 4, height = 4, useDingbats=FALSE)
 
 
-fisher.test(table(df.test %>% 
+fisher.test(table(df.test.iv %>% 
                     filter(Timepoint > 10, Timepoint < 30) %>% 
                     pull(Treatment_group),
-                  df.test %>% filter(Timepoint > 10, Timepoint < 30) %>% 
+                  df.test.iv %>% filter(Timepoint > 10, Timepoint < 30) %>% 
                     pull(drug)))
 # 
 # Fisher's Exact Test for Count Data
@@ -796,16 +888,37 @@ fisher.test(table(df.test %>%
 # odds ratio 
 #   0.580387 
 
-# the enrichment is stronger in the PTCy group with this approach!
+#' the enrichment is stronger in the PTCy group with this approach!
 
-df.m <- df.test %>% 
+# number of doses?
+
+g <- df.test.iv %>% 
+  filter(Timepoint > 10, Timepoint < 30) %>% 
+  ggplot(aes(x=Treatment_group, y=doses)) + 
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.1) +
+  theme_bw() + 
+  xlab('') 
+ggsave(g, filename=here('figures/abx/doses_non_prophylaxis_14_28_IV.pdf'),
+       width = 4, height = 4, useDingbats=FALSE)
+
+wilcox.test(doses~Treatment_group, 
+            data=df.test.iv %>% filter(Timepoint > 10, Timepoint < 30))
+
+# data:  doses by Treatment_group
+# W = 54012, p-value = 0.0009636
+# alternative hypothesis: true location shift is not equal to 0
+
+#' same here
+
+df.m <- df.test.iv %>% 
   filter(Timepoint > 10, Timepoint < 30) %>% 
   group_by(drug, Treatment_group) %>% 
   reframe(m=median(copies_16S), s=sd(copies_16S), 
           q25=quantile(copies_16S, probs=0.25),
           q75=quantile(copies_16S, probs=0.75))
 
-g <- df.test %>% 
+g <- df.test.iv %>% 
   filter(Timepoint > 10, Timepoint < 30) %>% 
   ggplot(aes(x=Treatment_group, fill=Treatment_group, y=copies_16S)) + 
   geom_boxplot(alpha=0.85, outlier.colour = NA) +
@@ -823,20 +936,169 @@ ggsave(g, filename=here('figures/abx/load_non_prophylaxis_14_28_IV.pdf'),
        width = 5, height = 4, useDingbats=FALSE)
 
 fit <- lmerTest::lmer(copies_16S~Treatment_group+drug+(1|Participant_ID), 
-                      data=df.test %>% filter(Timepoint> 10, Timepoint < 30))
+                      data=df.test.iv %>% filter(Timepoint> 10, Timepoint < 30))
 coefficients(summary(fit))
 #                         Estimate Std. Error       df    t value      Pr(>|t|)
 # (Intercept)             8.6997659 0.06230675 328.1369 139.627985 2.621489e-294
 # Treatment_groupTac/MTX  0.3039697 0.07845102 266.2966   3.874643  1.344993e-04
 # drugTRUE               -0.3194158 0.06759541 586.8225  -4.725407  2.877572e-06
 
+fit <- lmerTest::lmer(copies_16S~Treatment_group+doses+(1|Participant_ID), 
+                      data=df.test.iv %>% filter(Timepoint> 10, Timepoint < 30))
+coefficients(summary(fit))
+#                         Estimate  Std. Error       df    t value      Pr(>|t|)
+# (Intercept)             8.73302871 0.059695700 317.0186 146.292424 4.694565e-293
+# Treatment_groupTac/MTX  0.29295224 0.077222117 266.4189   3.793631  1.837642e-04
+# doses                  -0.04187209 0.006219033 605.7389  -6.732894  3.867229e-11
+
 fit <- lmerTest::lmer(copies_16S~Treatment_group+(1|Participant_ID), 
-                      data=df.test %>% filter(Timepoint> 10, Timepoint < 30))
+                      data=df.test.iv %>% filter(Timepoint> 10, Timepoint < 30))
 coefficients(summary(fit))
 #                        Estimate Std. Error       df    t value      Pr(>|t|)
 # (Intercept)            8.5551982 0.05601974 257.1058 152.717578 2.649049e-254
 # Treatment_groupTac/MTX 0.3414158 0.08035317 263.0165   4.248941  2.984152e-05
 
-# the same conclusion still holds!!!
-# the difference between arms is not due to IV-given antibiotics, even
-# though there is a over-representation of IV antibiotics in the PTCy group
+#' the same conclusion still holds!!!
+#' the difference in microbial load between arms is not due to IV-given 
+#' antibiotics, even though there is a over-representation of IV antibiotics 
+#' in the PTCy group
+#' I would think that this is a pretty strong indication that Abx are not the
+#' driving force here, at least not alone
+
+
+#' Should probably also test alpha diversity again
+df.test.iv <- df.test.iv %>% full_join(alpha, by='Sample_ID')
+fit <- lmerTest::lmer(shannon~Treatment_group+drug+(1|Participant_ID), 
+                      data=df.test.iv %>% filter(Timepoint> 10, Timepoint < 30))
+coefficients(summary(fit))['Treatment_groupTac/MTX','Pr(>|t|)'] # no
+fit <- lmerTest::lmer(shannon~Treatment_group+doses+(1|Participant_ID), 
+                      data=df.test.iv %>% filter(Timepoint> 10, Timepoint < 30))
+coefficients(summary(fit))['Treatment_groupTac/MTX','Pr(>|t|)'] # no 
+fit <- lmerTest::lmer(invsimpson~Treatment_group+drug+(1|Participant_ID), 
+                      data=df.test.iv %>% filter(Timepoint> 10, Timepoint < 30))
+coefficients(summary(fit))['Treatment_groupTac/MTX','Pr(>|t|)'] # yes
+fit <- lmerTest::lmer(invsimpson~Treatment_group+doses+(1|Participant_ID), 
+                      data=df.test.iv %>% filter(Timepoint> 10, Timepoint < 30))
+coefficients(summary(fit))['Treatment_groupTac/MTX','Pr(>|t|)'] # yes
+fit <- lmerTest::lmer(simpson~Treatment_group+drug+(1|Participant_ID), 
+                      data=df.test.iv %>% filter(Timepoint> 10, Timepoint < 30))
+coefficients(summary(fit))['Treatment_groupTac/MTX','Pr(>|t|)'] # no
+fit <- lmerTest::lmer(simpson~Treatment_group+doses+(1|Participant_ID), 
+                      data=df.test.iv %>% filter(Timepoint> 10, Timepoint < 30))
+coefficients(summary(fit))['Treatment_groupTac/MTX','Pr(>|t|)'] # no
+
+#' same picture as above: the difference in Inverse Simpson remains significant
+#' also when including antibiotics, not so for the other diversity metrics
+#' This shows again that maybe inverse simpson might have been the better
+#' metric to use, but we had to use Shannon because of the prespecified 
+#' analyses plan. However, Peled et al. also used Inverse Simpson, so for
+#' comparison it makes sense to include it as well
+
+
+
+# ##############################################################################
+#' Edit:
+#' Reviewer 4 mentioned that infections might be additional confounders
+#' 
+#' we could add this here?
+#' 
+#' not really, since the infection data is not yet fully adjudicated
+#' however, if we add the preliminary infection data, do they have a significant
+#' contribution?
+
+# get infection data?
+df.inf <- read_csv('./files/inf.csv') %>%  # This is data from Mike
+  rename(Participant_ID=PATID, infection_day=binfday)
+
+df.response %>% 
+  select(Participant_ID, Treatment_group) %>% 
+  left_join(df.inf) %>% 
+  ggplot(aes(x=infection_day, fill=Treatment_group)) + 
+  geom_histogram(bins=100) + 
+  facet_grid(Treatment_group~.)
+
+tmp.2 <- df.inf %>% 
+  mutate(Start_rel=infection_day, End_rel=infection_day+7) %>% 
+  arrange(Participant_ID)
+
+df.test.2 <- tmp.2 %>% 
+  full_join(df.cor, by='Participant_ID', relationship = 'many-to-many') %>% 
+  mutate(infection=case_when(
+    ((Start_rel < (Timepoint-7)) & (End_rel > (Timepoint-7)))~'yes',
+    ((Start_rel < (Timepoint)) & (End_rel > (Timepoint)))~'yes',
+    TRUE~'no')) %>% 
+  group_by(Participant_ID, Timepoint, Treatment_group, 
+           copies_16S, Sample_ID) %>% 
+  reframe(infection=any(infection=='yes'))
+
+g <- df.test.2 %>% 
+  filter(Timepoint > 10, Timepoint < 30) %>% 
+  group_by(Treatment_group, infection) %>% 
+  tally() %>% 
+  group_by(Treatment_group) %>% 
+  mutate(n.all=sum(n)) %>% 
+  mutate(freq=n/n.all) %>% 
+  ggplot(aes(x=Treatment_group, y=freq, fill=infection)) + 
+  geom_bar(stat='identity') + 
+  theme_bw() +
+  scale_fill_manual(values=c('#202864', '#D23264')) +
+  xlab('') + ylab('Proportion') + 
+  coord_flip() + 
+  theme(panel.grid.minor = element_blank(), 
+        panel.grid.major.y = element_blank())
+ggsave(g, filename='./figures/revision/infections_bias.png',
+       width = 6, height = 2)
+
+# also more common in PTCy
+
+fisher.test(table(df.test.2 %>% 
+                     filter(Timepoint > 10, Timepoint < 30) %>% 
+                     pull(Treatment_group),
+                   df.test.2 %>% filter(Timepoint > 10, Timepoint < 30) %>% 
+                     pull(infection)))
+# p-value = 0.001685
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#   0.2450301 0.7591764
+# sample estimates:
+#   odds ratio 
+# 0.4373416
+# yes, this is significant
+
+fit <- lmerTest::lmer(copies_16S~Treatment_group+drug+infection+(1|Participant_ID), 
+                      data=df.test %>% 
+                        full_join(df.test.2 %>% 
+                                    select(Sample_ID, infection), 
+                                  by='Sample_ID') %>% 
+                        filter(Timepoint> 10, Timepoint < 30))
+coefficients(summary(fit))
+# Estimate Std. Error       df    t value      Pr(>|t|)
+# (Intercept)             8.7282552 0.06266124 329.6833 139.292736 5.126462e-295
+# Treatment_groupTac/MTX  0.3138135 0.07770614 265.3585   4.038464  7.047726e-05
+# drugTRUE               -0.3593372 0.06628659 579.7957  -5.420964  8.708413e-08
+
+# are those two entangled
+df.test %>% 
+  full_join(df.test.2 %>% 
+              select(Sample_ID, infection), 
+            by='Sample_ID') %>% 
+  filter(Timepoint> 10, Timepoint < 30) %>% 
+  group_by(drug, infection) %>% 
+  tally() %>% 
+  ggplot(aes(x=drug, y=n, fill=infection)) +
+  geom_bar(stat='identity')
+fisher.test(table(df.test %>% 
+                    full_join(df.test.2 %>% 
+                                select(Sample_ID, infection), 
+                              by='Sample_ID') %>% 
+                    filter(Timepoint> 10, Timepoint < 30) %>% pull(drug),
+                  df.test %>% 
+                    full_join(df.test.2 %>% 
+                                select(Sample_ID, infection), 
+                              by='Sample_ID') %>% 
+                    filter(Timepoint> 10, Timepoint < 30) %>% pull(infection)))
+#' yes, of course
+#' it would have been weird if not
+#' so I guess it's fine to not include infections, since antibiotics and 
+#' infections are anyway correlated, so much of the possible 'confounding' from
+#' infections is already covered by abx treatment
