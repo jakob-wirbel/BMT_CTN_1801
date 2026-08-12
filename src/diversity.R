@@ -122,6 +122,15 @@ g.alpha.peled <- df.alpha %>%
 ggsave(g.alpha.peled, filename='./figures/alpha/alpha_time_peled.pdf',
        width = 8, height = 5, useDingbats=FALSE)
 
+# source data export
+df.alpha %>% 
+  select(Sample_ID, shannon, Timepoint, Participant_ID, Treatment_group) %>% 
+  write_tsv('./figures/source_data/Fig2a.tsv')
+
+df.alpha %>% 
+  select(Sample_ID, invsimpson, Timepoint, Participant_ID, Treatment_group) %>% 
+  write_tsv('./figures/source_data/EDFig3e.tsv')
+
 
 # ##############################################################################
 # extraction copies 
@@ -242,6 +251,26 @@ g <- df.alpha %>%
 ggsave(g, filename=here('figures/alpha/alpha_vs_abs_ab.pdf'),
        width = 5, height = 4, useDingbats=FALSE)
 
+# source data export
+df.alpha %>% 
+  select(Sample_ID, copies_16S, copies, Timepoint, 
+         Participant_ID, Treatment_group) %>% 
+  write_tsv('./figures/source_data/Fig2b.tsv')
+
+df.alpha %>% 
+  select(Sample_ID, DNA_concentration, Timepoint, 
+         Participant_ID, Treatment_group) %>% 
+  mutate(DNA_concentration=case_when(
+    DNA_concentration < 0.1~0.1, TRUE~DNA_concentration)) %>% 
+  write_tsv('./figures/source_data/EDFig3b.tsv')
+
+df.alpha %>% 
+  select(Sample_ID, copies_16S, copies, Timepoint, 
+         Participant_ID, Treatment_group) %>% 
+  filter(copies=='measured') %>% 
+  write_tsv('./figures/source_data/EDFig3d.tsv')
+
+
 # ##############################################################################
 # How about host DNA in the stool (as a marker for inflammation?)
 
@@ -271,3 +300,10 @@ fit <- lmerTest::lmer(hostremoved_frac~Treatment_group+(1|Participant_ID),
                         filter(Timepoint %in% c('14', '21', '28')))
 summary(fit)
 # p-value = 0.815
+
+# source data export
+df.alpha %>% 
+  mutate(perc_human=(1-hostremoved_frac)*100) %>% 
+  select(Sample_ID, perc_human, Timepoint, 
+         Participant_ID, Treatment_group) %>% 
+  write_tsv('./figures/source_data/EDFig1c.tsv')
