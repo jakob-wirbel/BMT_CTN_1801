@@ -14,7 +14,8 @@ feat.rel <- prop.table(as.matrix(feat.motus), 2)
 # function to test
 .f_test <- function(.x, .y){
   if (mean(.x$value!=log10(5e-05)) > 0.1){
-    fit <- lmerTest::lmer(value~Treatment_group + (1|Participant_ID), data=.x)
+    fit <- lmerTest::lmer(value~Treatment_group + drug + (1|Participant_ID), 
+                          data=.x)
     coefs <- coefficients(summary(fit))
     fit.abs <- lmerTest::lmer(log10(value.abs+1)~Treatment_group + 
                                 (1|Participant_ID), data=.x)
@@ -27,10 +28,11 @@ feat.rel <- prop.table(as.matrix(feat.motus), 2)
 }
 
 .f_test_single <- function(.x, .y){
+  # browser()
   if (mean(.x$value!=-4) > 0.1){
-    fit <- lm(value~Treatment_group, data=.x)
+    fit <- lm(value~Treatment_group + drug, data=.x)
     coefs <- coefficients(summary(fit))
-    fit.abs <- lm(log10(value.abs+1)~Treatment_group, data=.x)
+    fit.abs <- lm(log10(value.abs+1)~Treatment_group + drug, data=.x)
     coefs.abs <- coefficients(summary(fit.abs))
     tibble(pval=coefs[2,4], coef=coefs[2,1],
            pval.abs=coefs.abs[2,4], coef.abs=coefs.abs[2,1], .y)
@@ -39,13 +41,16 @@ feat.rel <- prop.table(as.matrix(feat.motus), 2)
   }
 }
 
+# get drug exposure data as well
+df.abx.exp <- read_tsv('./files/abx_exposure.tsv')
+
 # ##############################################################################
 # Differences between arms at baseline
 
 meta.baseline <- df.meta.clean %>% 
   filter(Timepoint=='PCON')
 feat.baseline <- feat.rel[,meta.baseline$Sample_ID]
-feat.baseline <- feat.baseline[rowMeans(feat.baseline!=0) > 0.05,]
+feat.baseline <- feat.baseline[rowMeans(feat.baseline!=0) > 0.1,]
 
 # volcano
 df.test <- as_tibble(feat.baseline,
@@ -54,6 +59,7 @@ df.test <- as_tibble(feat.baseline,
   left_join(meta.baseline, by='Sample_ID') %>% 
   left_join(df.response %>% select(Participant_ID, Treatment_group), 
             by='Participant_ID') %>% 
+  left_join(df.abx.exp %>% select(Sample_ID, drug), by='Sample_ID') %>% 
   mutate(value.abs=value*10^copies_16S) %>% 
   mutate(value=log10(value + 5e-05)) %>% 
   group_by(species) %>% 
@@ -104,13 +110,14 @@ ggsave(g, filename=here('figures/composition/volcano_differences_baseline.pdf'),
 
 # remove all samples from single patients
 feat.test <- feat.rel[,df.meta.clean$Sample_ID]
-feat.test <- feat.test[rowMeans(feat.test!=0) > 0.05,]
+feat.test <- feat.test[rowMeans(feat.test!=0) > 0.1,]
 
 # volcano
 df.test <- as_tibble(feat.test,
                      rownames='species') %>% 
   pivot_longer(-species, names_to = 'Sample_ID') %>% 
   left_join(df.meta.clean, by='Sample_ID') %>% 
+  left_join(df.abx.exp %>% select(Sample_ID, drug), by='Sample_ID') %>% 
   left_join(df.response %>% select(Participant_ID, Treatment_group), 
             by='Participant_ID') %>% 
   mutate(value.abs=value*10^copies_16S) %>% 
@@ -204,6 +211,7 @@ df.test <- as_tibble(feat.rel,
   mutate(prev=mean(value!=0)) %>% 
   filter(prev > 0.1) %>% 
   mutate(value=log10(value + 5e-05)) %>% 
+  left_join(df.abx.exp %>% select(Sample_ID, drug), by='Sample_ID') %>% 
   group_map(.f=.f_test) %>% bind_rows() %>% 
   filter(!is.na(pval))
 
@@ -268,107 +276,17 @@ df.prediction <- as_tibble(feat.rel[626,,drop=FALSE],
   filter(!is.na(m))
 source('./src/utils.r')
 df.res <- .f_test_outcome(df.prediction, landmarked = 28)
-View(df.res$associations %>% filter(set=='all'))
+df.res$associations %>% filter(set=='all') %>% 
+  mutate(eff=paste0(sprintf(fmt='%.3f', estimate), ' (', 
+                    sprintf('%.3f', low), ', ', 
+                    sprintf('%.3f', high), ')')) %>% 
+  mutate(pval=sprintf('%.3f', pval))  %>% 
+  select(outcome, pval, eff) %>% 
+  mutate(outcome=factor(
+    outcome, levels = c('NRM', 'Relapse', 'aGVHD24', 'aGVHD34', 
+                        'cGVHD', 'cGVHD_MS', 'OS', 'GRFS'))) %>% 
+  arrange(outcome)
 
-# ##############################################################################
-# is any of this due to antibiotics exposure in this timeframe 
-# rather than PTCy?
-
-load('./files/abx_exposure.RData')
-
-df.test.abx <- as_tibble(feat.rel[df.test$species,], rownames='species') %>% 
-  pivot_longer(-species, names_to = 'Sample_ID') %>% 
-  left_join(df.meta.clean %>% select(Sample_ID, Participant_ID, Timepoint), 
-            by='Sample_ID') %>% 
-  filter(Timepoint %in% c('7', '14', '21', '28')) %>% 
-  left_join(df.exposure, by='Sample_ID') %>% 
-  pivot_longer(-c(species, Sample_ID, value, Timepoint, Participant_ID), 
-               values_to = 'exposure', names_to='abx') %>% 
-  group_by(species, abx) %>% 
-  group_map(.f=function(.x, .y){
-    if (mean(.x$exposure) > 0.05){
-      fit <- lm(value~exposure, data=.x %>% mutate(value=as.numeric(value!=0)))
-      res <- coefficients(summary(fit))
-      tibble(pval=res[2,4], estimate=res[2,1], .y, 
-             perc_expose=mean(.x$exposure))
-    } else {
-      tibble(pval=NA, estimate=NA, perc_expose=mean(.x$exposure), .y)
-    }
-  }) %>% bind_rows()
-
-df.test.abx %>% 
-  filter(!is.na(pval)) %>% 
-  mutate(scindens=str_detect(species, 'scindens')) %>% 
-  ggplot(aes(x=estimate, y=-log10(pval), col=scindens)) + 
-  geom_point() + 
-  facet_wrap(~abx)
-
-# any non-prophylaxis abx?
-df.abx.effect <- df.exposure %>% 
-  pivot_longer(-Sample_ID) %>% 
-  filter(!name %in% c('Ciprofloxacin/Cipro-PO', 
-                      'Penicillin\nVK/Apo-pen-VK/Novo-pen-VK-PO',
-                      'Trimethoprim-Sulfamethoxazole\n/Bactrim/Septra-PO',
-                      'Levofloxacin/Levaquin-PO', 'Dapsone-PO', 
-                      'Cefdinir-PO')) %>% 
-  group_by(Sample_ID) %>% 
-  reframe(drug=any(value)) %>% 
-  left_join(df.meta.clean %>% select(Sample_ID, Participant_ID, 
-                                     Timepoint),
-            by='Sample_ID') %>% 
-  left_join(df.response %>% select(Participant_ID, Treatment_group), 
-            by='Participant_ID') %>% 
-  filter(Timepoint %in% c('14', '21', '28')) %>% 
-  left_join(as_tibble(feat.rel[df.test$species,], rownames='species') %>% 
-              pivot_longer(-species, names_to = 'Sample_ID'),
-            by='Sample_ID') %>% 
-  group_by(species) %>% 
-  group_map(.f=function(.x, .y){
-    fit <- lmerTest::lmer(value~Treatment_group + drug + (1|Participant_ID), 
-                          data=.x %>% mutate(log10(value + 5e-05)))
-    res <- coefficients(summary(fit))
-    fit2 <- lmerTest::lmer(value~Treatment_group + (1|Participant_ID), 
-                           data=.x %>% mutate(log10(value + 5e-05)))
-    res2 <- coefficients(summary(fit2))
-    tibble(pval=res[3,5], estimate=res[3,1], pval.group=res[2,5],
-           estimate.group=res[2,1], 
-           pval.og=res2[2,5], estimate.og=res2[2,1], .y)
-  }) %>% bind_rows() 
-  
-
-g <- df.abx.effect %>% 
-  left_join(df.test %>% transmute(species, pval.original=pval, 
-                                  coef.original=coef),
-            by='species') %>% 
-  mutate(pval=p.adjust(pval, method='BH')) %>%
-  
-  # ggplot(aes(x=-log10(pval), y=-log10(pval.original ))) + 
-  mutate(pval.original=p.adjust(pval.original, method='BH')) %>%
-  mutate(type=case_when(pval.original < 0.05~'group',
-                        pval < 0.05~'abx', 
-                        TRUE~'other')) %>% 
-  arrange(desc(type)) %>% 
-  ggplot(aes(x=estimate, y=coef.original, col=type)) + 
-    geom_point() +
-    theme_bw() + theme(panel.grid.minor = element_blank()) +
-    xlab('Abx effect size') + 
-    ylab('Group effect size') +
-    scale_colour_manual(values=c('orange', '#8C1515', 'grey'))
-ggsave(g, filename=here('figures/composition/group_vs_abx.pdf'),
-       width = 6, height = 4, useDingbats=FALSE)
-
-
-df.abx.effect %>% 
-  mutate(scindens=str_detect(species, 'scindens')) %>% 
-  mutate(pval=p.adjust(pval, method='BH')) %>% 
-  mutate(qval=p.adjust(pval.og, method='BH')) %>% 
-  mutate(found=qval < 0.05) %>% 
-  ggplot(aes(x=estimate, y=-log10(pval), col=scindens)) + 
-  geom_point() + 
-  theme_bw() + theme(panel.grid.minor = element_blank()) +
-  geom_hline(yintercept = -log10(c(0.05, 0.01)), lty=2) +
-  xlab('Linear model estimate') + 
-  ylab('-log10(q-value)') 
 
 # ##############################################################################
 # let's make this cute with the phylum?
@@ -422,7 +340,7 @@ df.test %>%
   arrange(GENOME_SOURCE, desc(n)) %>% View
 
 # abundance distribution for all the ones with differential abundance
-as_tibble(feat.rel[df.test %>% mutate(qval=p.adjust(pval, method='BH')) %>% 
+g <- as_tibble(feat.rel[df.test %>% mutate(qval=p.adjust(pval, method='BH')) %>% 
                      filter(qval < 0.05) %>% pull(species),], 
           rownames='species') %>% 
   pivot_longer(-species, names_to = 'Sample_ID') %>% 
@@ -434,3 +352,5 @@ as_tibble(feat.rel[df.test %>% mutate(qval=p.adjust(pval, method='BH')) %>%
     geom_boxplot(outlier.shape = NA) + 
     geom_jitter(width = 0.1) +
     facet_wrap(~species)
+ggsave(g, filename=here('figures/composition/boxplot_7_28.pdf'),
+       width = 6, height = 4, useDingbats=FALSE)
