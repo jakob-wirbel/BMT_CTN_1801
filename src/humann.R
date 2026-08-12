@@ -13,6 +13,7 @@ colours <- yaml::read_yaml('./files/colours.yml')
 
 # metadata
 load('./data/all_data.RData')
+df.abx.exp <- read_tsv('./files/abx_exposure.tsv')
 
 df.humann.raw <- read_tsv(here('data/humann.tsv'), col_types = cols())
 
@@ -110,10 +111,11 @@ df.baseline <- df.baseline[rowMeans(df.baseline!=0) > 0.05,]
 df.res <- map(rownames(df.baseline), .f=function(x){
   tmp <- enframe(df.baseline[x,], name = 'Sample_ID') %>% 
     left_join(df.meta.clean, by='Sample_ID') %>% 
+    left_join(df.abx.exp %>% select(Sample_ID, drug), by='Sample_ID') %>% 
     left_join(df.response %>% select(Participant_ID, Treatment_group),
               by='Participant_ID') %>% 
     mutate(value=log10(value+5e-06))
-  fit <- lm(value~Treatment_group, data=tmp)
+  fit <- lm(value~Treatment_group+drug, data=tmp)
   f <- coefficients(summary(fit))
   tibble(pathway=x, coef=f[2,1], p.val=f[2,4])}) %>% 
   bind_rows()
@@ -134,10 +136,11 @@ ggsave(g, filename=here('figures/humann/volcano_baseline.pdf'),
 df.res <- map(rownames(df.humann), .f=function(x){
   tmp <- enframe(df.humann[x,], name = 'Sample_ID') %>% 
     left_join(df.meta.clean, by='Sample_ID') %>% 
+    left_join(df.abx.exp %>% select(Sample_ID, drug), by='Sample_ID') %>% 
     left_join(df.response %>% select(Participant_ID, Treatment_group),
               by='Participant_ID') %>% 
     mutate(value=log10(value+5e-06))
-  fit <- lmerTest::lmer(value~Treatment_group+(1|Participant_ID), data=tmp)
+  fit <- lmerTest::lmer(value~Treatment_group+drug+(1|Participant_ID), data=tmp)
   f <- coefficients(summary(fit))
   tibble(pathway=x, coef=f[2,1], p.val=f[2,5])}) %>% 
   bind_rows()
@@ -152,7 +155,7 @@ g <- df.res %>%
   geom_hline(yintercept = -log10(c(0.05, 0.001)), lty=2)
 ggsave(g, filename=here('figures/humann/volcano_overall.pdf'),
        width = 4, height = 4, useDingbats=FALSE)
-# nothign really, either
+# nothing really, either
 
 # relative abundance difference between arms 14-28?
 df.14_28 <- df.humann[,df.meta.clean %>% 
@@ -162,10 +165,11 @@ df.14_28 <- df.14_28[rowMeans(df.14_28!=0) > 0.05,]
 df.res <- map(rownames(df.14_28), .f=function(x){
   tmp <- enframe(df.14_28[x,], name = 'Sample_ID') %>% 
     left_join(df.meta.clean, by='Sample_ID') %>% 
+    left_join(df.abx.exp %>% select(Sample_ID, drug), by='Sample_ID') %>% 
     left_join(df.response %>% select(Participant_ID, Treatment_group),
               by='Participant_ID') %>% 
     mutate(value=log10(value+5e-06))
-  fit <- lmerTest::lmer(value~Treatment_group+(1|Participant_ID), data=tmp)
+  fit <- lmerTest::lmer(value~Treatment_group+drug+(1|Participant_ID), data=tmp)
   f <- coefficients(summary(fit))
   tibble(pathway=x, coef=f[2,1], p.val=f[2,5])}) %>% 
   bind_rows()
@@ -256,6 +260,17 @@ summary(lmerTest::lmer(m~Treatment_group+hostremoved_reads+(1|Participant_ID),
 # Treatment_groupTac/MTX   0.27798    0.05281 266.83277   5.264  2.9e-07 ***
 # hostremoved_reads        0.20524    0.09676 607.91339   2.121   0.0343 *  
 # still significant!
+
+# maybe account for antibiotic treatment?
+summary(lmerTest::lmer(m~Treatment_group+hostremoved_reads+(1|Participant_ID), 
+                       data=df.bile %>% mutate(m=log10(m+1e-05)) %>% 
+                         mutate(hostremoved_reads=log10(hostremoved_reads)) %>% 
+                         mutate(depth=hostremoved_reads < 1e7)))
+# Estimate Std. Error        df t value Pr(>|t|)    
+# (Intercept)             -6.37926    0.71958 608.13260  -8.865  < 2e-16 ***
+# Treatment_groupTac/MTX   0.27798    0.05281 266.83277   5.264  2.9e-07 ***
+# hostremoved_reads        0.20524    0.09676 607.91339   2.121   0.0343 *  
+
 
 # ##############################################################################
 # visualize bile acids
@@ -372,6 +387,7 @@ x <- 'PWY-5677: succinate fermentation to butanoate'
 x <- 'PWY-7456: &beta;-(1,4)-mannan degradation'
 x <- 'PWY-622: starch biosynthesis'
 x <- 'PWY-7312: dTDP-&beta;-D-fucofuranose biosynthesis'
+x <- 'TRPSYN-PWY: L-tryptophan biosynthesis'
 df.pred <- enframe(df.14_28[x,], name='Sample_ID') %>% 
   left_join(df.meta.clean, by='Sample_ID') %>% 
   filter(Timepoint %in% c('14', '21', '28')) %>% 
@@ -386,6 +402,17 @@ df.pred %>% group_by(Treatment_group, m) %>% tally() %>%
 a <- .f_test_outcome(df.pred, landmarked = 28)
 
 
+enframe(df.humann[x,], name='Sample_ID') %>% 
+  full_join(df.meta.clean, 
+             by='Sample_ID') %>% 
+  left_join(df.response %>% select(Participant_ID, Treatment_group),
+            by='Participant_ID') %>% 
+  ggplot(aes(x=as.numeric(Timepoint), y=log10(value+5e-05), 
+             col=Treatment_group))+ 
+  geom_jitter() +
+  geom_smooth(method='loess')
+
+
 # ##############################################################################
 # specifically how does it look for butyrate production?
 
@@ -393,8 +420,7 @@ df.associations.all %>%
   filter(set=='all') %>% 
   filter(str_detect(pathway, 'butanoate')) %>% View
 
-
-df.butyrate <- as_tibble(df.humann[c(
+scfa.pathways <- c(
   'CENTFERM-PWY: pyruvate fermentation to butanoate',
   'PWY-5676: acetyl-CoA fermentation to butanoate II',
   'P163-PWY: L-lysine fermentation to acetate and butanoate',
@@ -403,13 +429,51 @@ df.butyrate <- as_tibble(df.humann[c(
   'P108-PWY: pyruvate fermentation to propanoate I',
   'PWY-5494: pyruvate fermentation to propanoate II (acrylate pathway)',
   'PWY-5088: L-glutamate degradation VIII (to propanoate)'
-  
-  ),], rownames='pathway') %>% 
+)
+df.butyrate <- as_tibble(df.humann[scfa.pathways,], rownames='pathway') %>% 
   pivot_longer(-pathway, names_to = 'Sample_ID') %>% 
   left_join(df.meta.clean %>% select(Sample_ID, Participant_ID, Timepoint), 
             by='Sample_ID') %>% 
   left_join(df.response %>% select(Participant_ID, Treatment_group), 
             by='Participant_ID')
+
+tmp %>% 
+  group_by(pathway) %>% 
+  reframe(freq=mean(presence)) %>% 
+  filter(pathway %in% scfa.pathways)
+
+
+df.associations.all %>% 
+  filter(set=='all') %>% 
+  filter(pathway %in% scfa.pathways) %>% 
+  mutate(eff=paste0(sprintf(fmt='%.3f', estimate), ' (', 
+                    sprintf('%.3f', low), ', ', 
+                    sprintf('%.3f', high), ')')) %>% 
+  mutate(pval=sprintf('%.3f', pval)) %>% 
+  select(pathway, outcome, pval, eff) %>% 
+  mutate(outcome=factor(
+    outcome, levels = c('NRM', 'Relapse', 'aGVHD24', 'aGVHD34', 
+                        'cGVHD', 'cGVHD_MS', 'OS', 'GRFS'))) %>% 
+  arrange(pathway, outcome) %>% 
+  View()
+
+
+
+
+# where do the pathways come from?
+# df.humann.raw %>% 
+#   filter(str_detect(pathway, 'PWY-5088')) %>% 
+#   filter(str_detect(pathway, '\\|')) %>% 
+#   pivot_longer(-pathway, names_to='Sample_ID') %>% 
+#   inner_join(df.meta.clean %>% 
+#                filter(Timepoint%in%c('14', '21', '28')), 
+#              by='Sample_ID') %>% 
+#   left_join(df.response %>% select(Participant_ID, Treatment_group),
+#             by='Participant_ID') %>% 
+#   group_by(Sample_ID) %>% 
+#   ggplot(aes(x=pathway, y=value, fill=Treatment_group)) + 
+#   geom_boxplot() +
+#   coord_flip()
 
 g <- df.butyrate %>% 
   ggplot(aes(x=as.numeric(Timepoint), 
@@ -441,6 +505,18 @@ g <- df.butyrate %>%
 ggsave(g, filename='./figures/humann/butyrate_time.pdf',
        width = 8, height = 6, useDingbats=FALSE)
 
+# any difference?
+lmerTest::lmer(value~Treatment_group + (1|Participant_ID), 
+               data=df.butyrate %>% 
+                 group_by(Sample_ID) %>% 
+                 reframe(value=sum(value), Timepoint, 
+                         Treatment_group, Participant_ID) %>% 
+                 distinct() %>% 
+                 mutate(value=log10(value+5e-05)) %>% 
+                 filter(Timepoint %in% c('14', '21', '28'))) %>% 
+  summary
+  
+# associations?
 df.pred <- df.butyrate %>% 
   group_by(Sample_ID) %>% 
   reframe(value=sum(value)) %>% 
@@ -452,6 +528,16 @@ df.pred <- df.butyrate %>%
   filter(!is.na(m2)) %>% 
   mutate(m=m2>median(m2)) 
 a <- .f_test_outcome(df.pred, landmarked = 28)
-a$associations %>% filter(set=='all') %>% View
+a$associations %>% filter(set=='all') %>% 
+  mutate(eff=paste0(sprintf(fmt='%.3f', estimate), ' (', 
+                    sprintf('%.3f', low), ', ', 
+                    sprintf('%.3f', high), ')')) %>% 
+  mutate(pval=sprintf('%.3f', pval))  %>% 
+  select(outcome, pval, eff) %>% 
+  mutate(outcome=factor(
+    outcome, levels = c('NRM', 'Relapse', 'aGVHD24', 'aGVHD34', 
+                        'cGVHD', 'cGVHD_MS', 'OS', 'GRFS'))) %>% 
+  arrange(outcome) %>% 
+  View()
 # no associations
 
