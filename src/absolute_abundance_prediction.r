@@ -161,6 +161,12 @@ ggsave(g + facet_grid(~batch),
        filename=here('figures/ddPCR', 'correlation_concentration_batch.pdf'),
        width = 9, height = 5, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  select(Sample_ID, batch, DNA_concentration, copies_per_extraction) %>% 
+  mutate(copies_per_extraction=log10(copies_per_extraction)) %>% 
+  write_tsv('./figures/source_data/EDFig3a.tsv')
+
 # why did we run the second batch?
 x <- df.meta %>% 
   left_join(df.table %>% select(Sample_ID, batch), by='Sample_ID') %>% 
@@ -181,6 +187,10 @@ t.test(log10(DNA_concentration)~second_comp, data=x)  # 9.864e-05 # still differ
 t.test(log10(DNA_concentration)~batch, data=x %>% filter(batch!='batch1'))  # 0.9204 # batch two is very representative
 ggsave(g, filename=here('figures/ddPCR', 'batch_bias.pdf'),
        width = 4, height = 4, useDingbats=FALSE)
+
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig3c.tsv')
 
 # ##############################################################################
 # train the model
