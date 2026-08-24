@@ -8,6 +8,7 @@ library("tidyverse")
 library("here")
 
 load('./data/all_data.RData')
+colours <- yaml::read_yaml('./files/colours.yml')
 
 feat.rel <- prop.table(as.matrix(feat.motus), 2)
 
@@ -105,6 +106,12 @@ g <- df.test %>%
 ggsave(g, filename=here('figures/composition/volcano_differences_baseline.pdf'),
        width = 6, height = 4, useDingbats=FALSE)
 
+# export source data
+df.test %>% 
+  select(pval, coef, species) %>% 
+  mutate(qval=p.adjust(pval, method='fdr')) %>% 
+  write_tsv('./figures/source_data/EDFig7a.tsv')
+
 # ##############################################################################
 # Differences between arms overall
 
@@ -165,6 +172,12 @@ g <- df.test %>%
   scale_colour_manual(values=c('darkgrey', '#8C1515'), guide='none')
 ggsave(g, filename=here('figures/composition/volcano_differences_overall.pdf'),
        width = 6, height = 4, useDingbats=FALSE)
+
+# export source data
+df.test %>% 
+  select(pval, coef, species) %>% 
+  mutate(qval=p.adjust(pval, method='fdr')) %>% 
+  write_tsv('./figures/source_data/EDFig7b.tsv')
 
 df.sm <- enframe(feat.test['Streptococcus mutans [ref_mOTU_v3_01605]',],
                  name = 'Sample_ID') %>% 
@@ -287,6 +300,26 @@ df.res$associations %>% filter(set=='all') %>%
                         'cGVHD', 'cGVHD_MS', 'OS', 'GRFS'))) %>% 
   arrange(outcome)
 
+# prevalence of C. scindens over time
+g <- as_tibble(feat.rel[626,,drop=FALSE],
+          rownames='species') %>% 
+  pivot_longer(-species, names_to = 'Sample_ID') %>% 
+  left_join(df.meta.clean, by='Sample_ID') %>% 
+  left_join(df.response %>% select(Participant_ID, Treatment_group), 
+            by='Participant_ID') %>% 
+  group_by(Timepoint, Treatment_group) %>% 
+  reframe(prevalence=mean(value>0)) %>% 
+  ggplot(aes(x=Timepoint, y=prevalence, colour=Treatment_group)) + 
+    geom_point() + 
+    geom_line(aes(group=Treatment_group)) + 
+    scale_colour_manual(values=unlist(colours$group.colours)) +
+    theme_bw() + theme(panel.grid.minor = element_blank())
+ggsave(g, filename='./figures/composition/c_scindens_prevalence.pdf',
+       width = 6, height = 3, useDingbats=FALSE)
+
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/Fig4b.tsv')
 
 # ##############################################################################
 # let's make this cute with the phylum?
@@ -321,6 +354,11 @@ g <- df.test %>%
 ggsave(g, filename=here('figures/composition/volcano_differences_7_28_class.pdf'),
        width = 6, height = 4, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  select(pval, coef, qval, species, class) %>% 
+  write_tsv('./figures/source_data/Fig4a.tsv')
+
 # check the actual genome names in the GTDB table?
 df.genome.metadata <- read_tsv('./files/mOTUs3.1.0.genome_metadata.tsv', 
                                col_types = cols()) %>% 
@@ -354,3 +392,9 @@ g <- as_tibble(feat.rel[df.test %>% mutate(qval=p.adjust(pval, method='BH')) %>%
     facet_wrap(~species)
 ggsave(g, filename=here('figures/composition/boxplot_7_28.pdf'),
        width = 6, height = 4, useDingbats=FALSE)
+
+# export source data
+g@data %>% 
+  select(species, Sample_ID, value, Timepoint, 
+         Participant_ID, Treatment_group) %>% 
+  write_tsv('./figures/source_data/Fig4c.tsv')
