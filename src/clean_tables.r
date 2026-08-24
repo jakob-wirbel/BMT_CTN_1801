@@ -384,6 +384,10 @@ g <- df.meta %>%
 ggsave(g, filename=here('figures/sample_type/number_of_samples.pdf'),
        width = 3, height = 4, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig9a.tsv')
+
 # copies per extraction
 df.cop <- df.meta %>% 
   filter(!is.na(Participant_ID)) %>% 
@@ -420,6 +424,9 @@ g <- df.plot.copies %>%
 ggsave(g, filename=here('figures/sample_type/copies_correlation.pdf'),
        width = 6, height = 4, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig9c.tsv')
 
 # 234 random next_day samples
 set.seed(2112)
@@ -470,7 +477,8 @@ if (!file.exists('./figures/sample_type/same_sample_correlation.pdf')){
     left_join(df.meta %>% 
                 mutate(type2=paste0(Participant_ID, '-', Timepoint)) %>% 
                 transmute(Sample_ID_2=Sample_ID, 
-                          Participant_ID_2=Participant_ID, type2), by='Sample_ID_2') %>% 
+                          Participant_ID_2=Participant_ID, type2), 
+              by='Sample_ID_2') %>% 
     mutate(fill=case_when(type==type2~'same_sample',
                           Participant_ID==Participant_ID_2~'same_patient',
                           TRUE~'other')) %>% 
@@ -487,6 +495,15 @@ if (!file.exists('./figures/sample_type/same_sample_correlation.pdf')){
                       guide='none')
   ggsave(g, filename='./figures/sample_type/same_sample_correlation.pdf',
          width = 4, height = 4, useDingbats=FALSE)
+  
+  # export source data
+  g@data %>% 
+    group_by(fill) %>% 
+    reframe(m=mean(correlation), med=median(correlation), 
+            iqr=IQR(correlation),
+            q25=quantile(correlation, 0.25),
+            q75=quantile(correlation, 0.75)) %>% 
+    write_tsv('./figures/source_data/EDFig9d.tsv')
 }
 
 # alpha
@@ -513,6 +530,10 @@ g <- df.alpha %>%
            label=paste0('rho=', sprintf(fmt='%.2f', spearman.rho)))
 ggsave(g, filename=here('figures/sample_type/alpha_diversity.pdf'),
        width = 4, height = 4, useDingbats=FALSE)
+
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig9b.tsv')
 
 # beta
 df.bc <- vegan::vegdist(vegan::rrarefy(t(feat.euk.added), 3000), method='bray')
@@ -606,6 +627,10 @@ g <- res %>%
 ggsave(g, file=here('figures/sample_type/volcano.pdf'),
        width = 4, height = 4, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig9e.tsv')
+
 
 # there is only a single one that might be slightly interesting, 
 # but not even very strong association
@@ -635,6 +660,10 @@ g <- df %>%
   ggtitle(x)
 ggsave(g, file='./figures/sample_type/species_difference.pdf',
        width = 4, height = 4, useDingbats=FALSE)
+
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig9f.tsv')
 
 # ##############################################################################
 # some accounting, again
@@ -801,6 +830,12 @@ g <- df.meta.clean %>%
     scale_fill_manual(values=unlist(colours$group.colours))
 ggsave(g, width = 5, height = 4, useDingbats=FALSE,
        filename=here('./figures/general/number_of_samples_per_participant.pdf'))
+
+# export source data
+g@data %>%
+  group_by(Treatment_group, n) %>% 
+  tally() %>% 
+  write_tsv('./figures/source_data/EDFig1b.tsv')
 
 # ##############################################################################
 # export cleaned tables
