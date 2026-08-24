@@ -59,6 +59,12 @@ ggsave(g + coord_cartesian(xlim=c(-20, 35)),
        filename='./figures/abx/cumulative_exposure_35.pdf',
        width = 5, height = 4, useDingbats=FALSE)    
 
+# export source data
+g@data %>% 
+  filter(Start_rel < 50) %>% 
+  arrange(Start_rel) %>% 
+  write_tsv('./figures/source_data/Fig2c.tsv')
+
 
 # exposure by class
 g <- abx.data %>% 
@@ -100,6 +106,12 @@ ggsave(g, filename=here('figures/abx/cumulative_exposure_detail.pdf'),
 ggsave(g + coord_cartesian(xlim=c(-20, 35)), 
        filename=here('figures/abx/cumulative_exposure_detail_35.pdf'),
        width = 8, height = 5, useDingbats=FALSE)   
+
+# export source data
+g@data %>% 
+  filter(Start_rel < 50) %>% 
+  arrange(Class, Start_rel) %>% 
+  write_tsv('./figures/source_data/EDFig4a.tsv')
 
 #
 df.test.logrank <- abx.data %>% 
@@ -232,6 +244,10 @@ g <- df.doses %>%
 ggsave(g, filename=here('figures/abx/number_of_doses_detail.pdf'),
        width = 12, height = 8, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig4b.tsv')
+
 df.doses %>% 
   group_by(class) %>% 
   group_map(.f=function(.x, .y){
@@ -280,6 +296,10 @@ g <- df.doses %>%
   scale_fill_manual(values=unlist(colours$group.colours))
 ggsave(g, filename=here('figures/abx/number_of_doses.pdf'),
        width = 5, height = 4, useDingbats=FALSE)
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/Fig2d.tsv')
+
 df.doses %>% 
   filter(!class %in% c('antifungal', 'antiprotist', 'antiviral')) %>% 
   group_by(Treatment_group, Participant_ID) %>% 
@@ -399,6 +419,10 @@ g <- df.exposure.most.common %>%
 ggsave(g, filename=here('figures/abx/exposure_most_common.pdf'),
        width = 8, height = 7, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig5b_1.tsv')
+
 # test this as well
 abx.data %>% 
   filter(Abx %in% abx.select) %>% 
@@ -491,6 +515,11 @@ g <- df.doses.most.common %>%
   scale_fill_manual(values=unlist(colours$group.colours))
 ggsave(g, filename=here('figures/abx/doses_most_common.pdf'),
        width = 8, height = 8, useDingbats=FALSE)
+
+# export source data
+g@data %>% 
+  arrange(Abx) %>% 
+  write_tsv('./figures/source_data/EDFig5b_2.tsv')
 
 df.doses.most.common %>% 
   group_by(Abx) %>% 
@@ -641,6 +670,10 @@ g <- df.res %>%
 ggsave(g, filename=here('figures/abx/volcano_drug_effect.pdf'),
        width = 5, height = 4, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig5a.tsv')
+
 tmp <- abx.data %>% 
   mutate(comb=paste0(Abx, '-', Route)) %>% 
   filter(comb %in% abx.treat) %>% 
@@ -687,6 +720,9 @@ g <- df.test %>%
 ggsave(g, filename=here('figures/abx/proportion_non_prophylaxis_14_28.pdf'),
        width = 4, height = 4, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/Fig1e.tsv')
 
 fisher.test(table(df.test %>% 
                     filter(Timepoint > 10, Timepoint < 30) %>% 
@@ -809,6 +845,11 @@ g <- df.test %>%
 ggsave(g, filename=here('figures/abx/load_non_prophylaxis_14_28.pdf'),
        width = 5, height = 4, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  select(Participant_ID, Timepoint, Treatment_group, copies_16S, 
+         drug, doses) %>% 
+  write_tsv('./figures/source_data/Fig1f.tsv')
 
 # ##############################################################################
 #' Let's try this differently
