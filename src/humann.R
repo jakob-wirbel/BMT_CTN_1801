@@ -185,6 +185,10 @@ g <- df.res %>%
 ggsave(g, filename='./figures/humann/volcano_14_to_28.pdf',
        width = 4, height = 4, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig7c.tsv')
+
 # wow, bile acids is the stronges differentially abudnant pathway between
 # treatment arms at this time
 # there must be something there!
@@ -243,6 +247,14 @@ g <- df.bile %>%
     xlab('') + ylab('Relative abundance') 
 ggsave(g, filename=here('figures/humann/bile_acid_14_28.pdf'),
        width = 4, height = 4, useDingbats=FALSE)
+
+# export source data
+g@data %>% 
+  select(Sample_ID, m, Timepoint, Participant_ID, Treatment_group) %>% 
+  mutate(m=log10(m + 1e-05)) %>% 
+  write_tsv('./figures/source_data/Fig4d.tsv')
+  
+
 summary(lmerTest::lmer(m~Treatment_group+(1|Participant_ID), 
                        data=df.bile %>% mutate(m=log10(m+1e-05))))
 # Fixed effects:
@@ -306,6 +318,10 @@ g <- df.bile.acid %>%
 ggsave(g, filename=here('figures/humann/bile_acids_vs_scindens.pdf'),
        width = 7, height = 4.5, useDingbats=FALSE)
 
+# export source data
+g@data %>% 
+  write_tsv('./figures/source_data/EDFig8a.tsv')
+
 # ##############################################################################
 # association between bile acids and outcome?
 
@@ -344,6 +360,12 @@ df.res$associations %>%
 # 6 aGVHD34     1.03  2.78  0.385 0.948  all          58      204
 # 7 GRFS        0.671 1.03  0.436 0.0698 all          58      211
 # 8 OS          0.794 1.53  0.412 0.491  all          59      215
+
+# export source data
+df.res$plots$cGVHD@data %>% 
+  write_tsv('./figures/source_data/Fig4e.tsv')
+df.res$plots$GRFS@data %>% 
+  write_tsv('./figures/source_data/EDFig8b.tsv')
 
 # ##############################################################################
 # any associations for other pathways?
