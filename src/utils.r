@@ -8,7 +8,7 @@ smat <- function(x) {
 }
 
 # plot the outcome of an Aalen-Johanson estimator
-.f_plot_ajfit <- function(tac, pty){
+.f_plot_ajfit <- function(tac, pty, max_days=365){
   
   df.plot.tac <- tibble(time=tac$time, cumhaz=smat(tac$cumhaz)[,1], 
                         type=c(rep('absent', tac$strata[1]), 
@@ -29,7 +29,7 @@ smat <- function(x) {
     bind_rows(tibble(time=x.b$time[-1],
                      cumhaz=x.b$cumhaz[-nrow(x.b)],
                      type='present')) %>% 
-    bind_rows(tibble(time=365, cumhaz=c(x.a$cumhaz[nrow(x.a)], 
+    bind_rows(tibble(time=max_days, cumhaz=c(x.a$cumhaz[nrow(x.a)], 
                                         x.b$cumhaz[nrow(x.b)]),
                      type=c('absent', 'present'))) %>% 
     bind_rows(tibble(time=0, cumhaz=0, type=c('absent', 'present'))) %>% 
@@ -56,7 +56,7 @@ smat <- function(x) {
     bind_rows(tibble(time=x.b$time[-1],
                      cumhaz=x.b$cumhaz[-nrow(x.b)],
                      type='present')) %>% 
-    bind_rows(tibble(time=365, cumhaz=c(x.a$cumhaz[nrow(x.a)], 
+    bind_rows(tibble(time=max_days, cumhaz=c(x.a$cumhaz[nrow(x.a)], 
                                         x.b$cumhaz[nrow(x.b)]),
                      type=c('absent', 'present'))) %>% 
     bind_rows(tibble(time=0, cumhaz=0, type=c('absent', 'present'))) %>% 
@@ -74,7 +74,7 @@ smat <- function(x) {
 }
 
 # plot the outcome of cox ph model
-.f_plot_coxph <- function(tac, pty){
+.f_plot_coxph <- function(tac, pty, max_days=365){
   
   df.plot.tac <- tibble(time=tac$time, surv=smat(tac$surv)[,1], 
                         type=c(rep('absent', tac$strata[1]), 
@@ -95,7 +95,7 @@ smat <- function(x) {
     bind_rows(tibble(time=x.b$time[-1],
                      surv=x.b$surv[-nrow(x.b)],
                      type='present')) %>% 
-    bind_rows(tibble(time=365, surv=c(x.a$surv[nrow(x.a)], 
+    bind_rows(tibble(time=max_days, surv=c(x.a$surv[nrow(x.a)], 
                                         x.b$surv[nrow(x.b)]),
                      type=c('absent', 'present'))) %>% 
     bind_rows(tibble(time=0, surv=1, type=c('absent', 'present'))) %>% 
@@ -122,7 +122,7 @@ smat <- function(x) {
     bind_rows(tibble(time=x.b$time[-1],
                      surv=x.b$surv[-nrow(x.b)],
                      type='present')) %>% 
-    bind_rows(tibble(time=365, surv=c(x.a$surv[nrow(x.a)], 
+    bind_rows(tibble(time=max_days, surv=c(x.a$surv[nrow(x.a)], 
                                         x.b$surv[nrow(x.b)]),
                      type=c('absent', 'present'))) %>% 
     bind_rows(tibble(time=0, surv=1, type=c('absent', 'present'))) %>% 
@@ -153,6 +153,9 @@ smat <- function(x) {
     pred$aGVHD34_days <- pred$aGVHD34_days - landmarked
     pred$OS_days <- pred$OS_days - landmarked
     pred$GRFS_days <- pred$GRFS_days - landmarked
+    max_days=365-landmarked
+  } else {
+    max_days=365
   }
   
   
@@ -237,7 +240,8 @@ smat <- function(x) {
       filter(Treatment_group=='Tac/MTX')
     ajfit.tac <- survfit(Surv(tmp[[paste0(var, '_days')]], 
                               tmp[[paste0(var, '_or_death')]])~tmp$m)
-    all.plots[[var]] <- .f_plot_ajfit(ajfit.tac, ajfit.pty) + ggtitle(var)
+    all.plots[[var]] <- .f_plot_ajfit(ajfit.tac, ajfit.pty, max_days) + 
+      ggtitle(var)
     df.hr <- df.hr %>% 
       add_row(outcome=var, set='all',
               high=x$conf.int['mTRUE','upper .95'], 
@@ -319,7 +323,8 @@ smat <- function(x) {
       filter(Treatment_group=='Tac/MTX')
     coxfit.tac <- survfit(Surv(tmp[[paste0(var, '_days')]], 
                               tmp[[paste0(var, '_event')]])~tmp$m)
-    all.plots[[var]] <- .f_plot_coxph(coxfit.tac, coxfit.pty) + ggtitle(var)
+    all.plots[[var]] <- .f_plot_coxph(coxfit.tac, coxfit.pty, max_days) + 
+      ggtitle(var)
     
     
     for (grouping in unique(pred$Treatment_group)){
